@@ -3,6 +3,9 @@
 import math
 from random import random
 
+import torch as th
+from .nn_utils import FCNetwork, get_opt, get_loss, TData, DataLoader, V
+
 """
 Defines the main class for Bayesian Optimization with Neural Networks.
 """
@@ -33,20 +36,41 @@ class Bo(object):
 
 class Bonn(Bo):
 
-    def __init__(self, exp, num_trials=128, layers=(5, 5, 5), opt=None,
-                 loss=None, cuda=False):
+    def __init__(self, exp, num_trials=128, layers=(5, 5, 5), num_epochs=10, 
+                 lr=0.01, cuda=False):
         self.exp = exp
         self.num_trials = num_trials
+        self.num_epochs = num_epochs
+        self.cuda = cuda
+        self.net = FCNetwork(num_in=len(exp.params), layers=layers)
+        self.opt = get_opt(self.net.parameters(), lr)
+        self.loss = get_loss()
+        self.param_keys = self.exp.params.keys()
 
     def fit(self, exp=None):
         if exp is None:
             exp = self.exp
 
+        params, results = [], []
         res_min = None
+        # Gather the data
         for res in exp.all_results():
+            params.append(self._extract_features(res.params))
+            results.append(res.value)
             if res_min is None or res.value < res_min:
                 res_min = res.value
         self.current_min = res_min
+
+        # Fit the data
+        dataset = DataLoader(TData(params, results), shuffle=True, num_workers=4)
+        for epoch in range(self.num_epochs):
+            for X, y in dataset:
+                X, y = V(X), V(y)
+                self.opt.zero_grad()
+                pred = self.net.forward(X)
+                loss = self.loss(pred, y)
+                loss.backward()
+                self.opt.step()
 
 
     def sample(self, exp=None):
@@ -58,8 +82,9 @@ class Bonn(Bo):
         # Sample num_trials parameters
         for _ in range(self.num_trials):
             params = exp.sample_all_params()
-            ei = self._ei(params)
-            if best_ei < ei:
+            sol = self._extract_features(params)
+            ei = self._ei(sol)
+            if best_ei is None or best_ei < ei:
                 best_ei = ei
                 best_params = params
         return best_params
@@ -72,4 +97,12 @@ class Bonn(Bo):
         return var * (gamma*cdf(gamma) + pdf(gamma))
 
     def _predict(self, sol):
-        return random(), random()
+        X = V(th.FloatTensor([sol]))
+        preds = []
+        for _ in range(10):
+            preds.append(self.net.forward(X).data.storage()[0])
+        p = th.FloatTensor(preds)
+        return p.mean(), p.std()
+
+    def _extract_features(self, params):
+        return [params[k] for k in self.param_keys]

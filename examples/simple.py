@@ -24,3 +24,4 @@ if __name__ == '__main__':
         bo.sample(e)
         res = loss(e.x, e.y, e.z)
         print res
+        e.add_result(res)
