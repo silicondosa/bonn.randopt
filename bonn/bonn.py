@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import math
-from random import random
 
 import torch as th
 from .nn_utils import FCNetwork, get_opt, get_loss, TData, DataLoader, V

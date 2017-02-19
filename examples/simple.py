@@ -19,9 +19,11 @@ if __name__ == '__main__':
     res = loss(e.x, e.y, e.z)
     e.add_result(res)
 
-    for i in xrange(100):
+    for i in xrange(200):
         bo.fit()
         bo.sample(e)
         res = loss(e.x, e.y, e.z)
         print res
-        e.add_result(res)
+        e.add_result(res, {
+            'trial': i
+            })
